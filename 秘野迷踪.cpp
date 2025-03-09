@@ -4602,8 +4602,7 @@ void show_insturction(){//展示游戏说明
 					}
 					else if(THING.spr.exist){//矛
 						int d=THING.spr.d;
-						if(THING.nst.exist) forw=MP(0,0);//红
-						else forw=MP(-20,60);//深黄 
+						forw=MP(-20,60);//深黄 
 					}
 					else if(THING.swd.exist){//剑 
 						forw=MP(-60,360);
@@ -4622,8 +4621,7 @@ void show_insturction(){//展示游戏说明
 						else forw=MP(-200,360);//黑
 					}
 					else if(THING.drt.exist()){//回旋镖
-						if(THING.nst.exist) forw=MP(0,0);//红
-						else forw=MP(0,240);//蓝
+						forw=MP(0,240);//蓝
 					}
 					else if(THING.ssk.exist()){//飞行的蜘蛛丝 
 						forw=MP(-100,360);//黑 
@@ -4676,10 +4674,6 @@ void show_insturction(){//展示游戏说明
 					else if(THING.lsr.exist){//激光
 						forw=MP(0,360);
 					}
-					else if(door_here(pos,1)){//貌似有扇门
-						if(plh) forw=MP(0,240);//蓝
-						else forw=MP(0,360);//白
-					}
 					else if(THING.hdr.exist){//隐藏门
 						forw=MP(-80,360);//灰
 					}
@@ -4724,6 +4718,10 @@ void show_insturction(){//展示游戏说明
 					}
 					else if(THING.exit_signs.exist){//有指向出口的标牌
 						forw=MP(0,120);//绿 
+					}
+					else if(door_here(pos,1)){//貌似有扇门
+						if(plh) forw=MP(0,240);//蓝
+						else forw=MP(0,360);//白
 					}
 					else if(POS.maze==EXIT){//出口 
 						forw=MP(0,360);//白 

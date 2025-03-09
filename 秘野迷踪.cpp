@@ -657,7 +657,15 @@ idea:
 				[2]脚踢：20N
 		6）特殊属性 
 			(1)进攻：正常、穿墙（附带透视）、隐身、瞬移（附带15格以内透视）、吸血
-			(2)防御：正常（矛无效）、闪避（远程武器无效）、石化（击退抗性）、肉盾（所有物理伤害无效，且不参与物理系统） 
+			(2)防御：正常、闪避（远程武器无效）、石化（击退抗性、矛等冷兵器无效）、肉盾（所有物理伤害无效，且不参与物理系统） 
+		7）显示
+			(1)字符
+				隐身：魍 
+				穿墙：魆
+				瞬移：魉 
+				石化：魑
+				闪避：魅 
+				其他：鬼+特定颜色 
 十、运动和力
 	1、运动
 		1）基本移动：player_detect_move、deal_bug、deal_ghost
@@ -2129,6 +2137,7 @@ struct ghost{//鬼结构体
 	//指每次移动周期后attack_time*vlc.wait_time发动攻击 
 	bool change_pos;//被打死了，改变位置复活 
 	bool update;//是否要更新（减小计算量） 
+	bool rampage;//是否在横冲直撞（弹射起步） 
 	void init(position_3D u,int att,int def);
 };
 vector<ghost> ghosts;//编号：0~MAX_GHOST_NUM-1
@@ -2693,7 +2702,7 @@ PSB str_spider_leg(position_3D u){
 	try{
 		PSB none=MP("",0);
 		if(wall_here(u)||hiden_door_here(u)) return none;//墙壁不显示蜘蛛附肢 
-		if(u.x<0||u.y<0||u.z<0) throw std::out_of_range("数组越界");
+		if(u.x<0||u.y<0||u.z<0) throw std::out_of_range("数组越界 xyz");
 		MAP &POS=game_map[u.x][u.y][u.z];
 		spider_leg &slg=POS.things.slg;
 		if(slg.num<=0) return none;//没有就不浪费时间了 
@@ -2701,8 +2710,8 @@ PSB str_spider_leg(position_3D u){
 			spider &sr=spiders[slg.id];
 			position_3D v=sr.pos;
 			int ix=1+u.x-v.x,iy=1+u.y-v.y;//在spider_image中的坐标
-			if(sr.kind>1||sr.kind<0||iy<0||iy>2||ix<0||ix>2||sr.d>=4||sr.d<0) throw std::out_of_range("数组越界");
-			if(!pos_in_area2(ix,iy,0,0,2,2)||!check_leg(u,v)||sr.d>=4||sr.d<0) return none;//出界或穿墙 
+			if(!pos_in_area2(ix,iy,0,0,2,2)||!check_leg(u,v)||sr.kind>1||sr.kind<0||sr.d>=4||sr.d<0) return none;//出界或穿墙 
+			if(sr.kind>1||sr.kind<0||iy<0||iy>2||ix<0||ix>2||sr.d>=4||sr.d<0) throw std::out_of_range("数组越界 spider_image");
 			return MP(spider_image[sr.kind][sr.d][iy][ix],sr.kind);//xy互换（屏幕显示和数组排列是xy轴互换的） 
 		}
 		string s="";
@@ -2715,8 +2724,8 @@ PSB str_spider_leg(position_3D u){
 				spider &sr=spiders[id];
 				int j=turn(i,TURN_BACK,8,1);//这条附肢在虫子哪个方向
 				int ix=1+dx8[j],iy=1+dy8[j];//在spider_image中的坐标
-				if(sr.kind>1||sr.kind<0||iy<0||iy>2||ix<0||ix>2||sr.d>=4||sr.d<0) throw std::out_of_range("数组越界");
-				if(!pos_in_area2(ix,iy,0,0,2,2)||!check_leg(u,v)||sr.d>=4||sr.d<0) return none;//出界或穿墙 
+				if(!pos_in_area2(ix,iy,0,0,2,2)||!check_leg(u,v)||sr.kind>1||sr.kind<0||sr.d>=4||sr.d<0) return none;//出界或穿墙 
+				if(sr.kind>1||sr.kind<0||iy<0||iy>2||ix<0||ix>2||sr.d>=4||sr.d<0) throw std::out_of_range("数组越界 spider_image");
 				s=spider_image[sr.kind][sr.d][iy][ix];//xy互换（屏幕显示和数组排列是xy轴互换的） 
 				POS.things.slg.id=id;//下次就不用再找了 
 				if(sr.kind&&s!="") return MP(s,1);//防止B型蜘蛛前部凹陷覆盖其他蜘蛛的附肢 
@@ -4667,9 +4676,6 @@ void show_insturction(){//展示游戏说明
 					else if(THING.lsr.exist){//激光
 						forw=MP(0,360);
 					}
-					else if(THING.exit_signs.exist){//有指向出口的标牌
-						forw=MP(0,120);//绿 
-					}
 					else if(door_here(pos,1)){//貌似有扇门
 						if(plh) forw=MP(0,240);//蓝
 						else forw=MP(0,360);//白
@@ -4716,6 +4722,9 @@ void show_insturction(){//展示游戏说明
 					else if(THING.lgt.exist){//灯 
 						forw=MP(-200,360);//超黑 
 					}
+					else if(THING.exit_signs.exist){//有指向出口的标牌
+						forw=MP(0,120);//绿 
+					}
 					else if(POS.maze==EXIT){//出口 
 						forw=MP(0,360);//白 
 					}
@@ -4751,7 +4760,8 @@ void show_insturction(){//展示游戏说明
 						out="KO"; 
 					}
 					else if(srh){//蜘蛛本体
-						out="蛛";  
+						if(sr.kind==1) out="蚃";
+						else out="蛛";  
 					}
 					/*
 					else if(THING.snt.nowk()>=1000){
@@ -4806,13 +4816,27 @@ void show_insturction(){//展示游戏说明
 					}
 					else if(gth&&!(spat.can_disappear()&&spat.disa.kind==2)&&!closed_box_here(pos,door_d)&&!wall_here(pos)){
 					//鬼（没有隐身消失，没有藏在箱子里，没有穿墙） 
-						if(spat.eva.use) out="闪";
-						else if(spat.rck.use) out="石";
-						else if(spat.can_through()) out="穿";//穿墙中 
+						if(spat.eva.use) out="魅";
+						else if(spat.rck.use) out="魑";
+						else if(spat.can_through()) out="魆";//穿墙中 
 						else if(spat.can_disappear()&&spat.disa.kind==1){//隐身中 
 							out="墙";
 						}
-						else out="鬼";//double_to_str(gt.lfin.life,0,2);// 
+						else{
+							/*
+							隐身：魍 
+							穿墙：魆
+							瞬移：魉 
+							石化：魑
+							闪避：魅 */
+							if(spat.attack==DISAPP) out="魍";
+							else if(spat.attack==THROUGH) out="魆";
+							else if(spat.attack==INSTANT) out="魉";
+							else if(spat.defense==ROCK) out="魑";
+							else if(spat.defense==EVADE) out="魅";
+							else out="鬼";
+							//out=double_to_str(gt.lfin.life,0,2);
+						}
 						/**/
 						special_effect &spe=gt.spe;
 						if(spe.mts.exist()&&gt.lfin.change==2)//中毒
@@ -4973,23 +4997,6 @@ void show_insturction(){//展示游戏说明
 					else if(THING.lsr.exist){//激光
 						out="※ ";
 					}
-					else if(THING.exit_signs.exist){//有指向出口的标牌
-						switch(THING.exit_signs.dir){
-							case 0:out="↑";
-								break;
-							case 1:out="→";
-								break;
-							case 2:out="↓";
-								break;
-							case 3:out="←";
-								break;
-						}
-						out+=" "; 
-					}
-					else if(door_here(pos,1)){//貌似有扇门
-						if(THING.kdr.light_through) out=" ]";
-						else out="门";
-					}
 					else if(THING.hdr.exist){//隐藏门
 						out="墙";//与墙尽量保持一致 
 					}
@@ -5038,6 +5045,23 @@ void show_insturction(){//展示游戏说明
 					else if(THING.lgt.exist){//灯 
 						if(THING.lgt.state) out="¤ ";
 						else out="灯";
+					}
+					else if(THING.exit_signs.exist){//有指向出口的标牌
+						switch(THING.exit_signs.dir){
+							case 0:out="↑";
+								break;
+							case 1:out="→";
+								break;
+							case 2:out="↓";
+								break;
+							case 3:out="←";
+								break;
+						}
+						out+=" "; 
+					}
+					else if(door_here(pos,1)){//貌似有扇门
+						if(THING.kdr.light_through) out=" ]";
+						else out="门";
 					}
 					else if(POS.maze==EXIT){//出口 
 						if(pos.x==1||pos.y==1) out="E]";
@@ -8011,11 +8035,11 @@ void initial(){//游戏初始化
 					//冷却时间 
 				}
 				double dis1=NED_p3(gt.pos,player1.pos),dis2=NED_p3(gt.goal,gt.pos),dis3=NED_p3(player1.pos,gt.goal);
-				if(game_timer[s]<=game_time&&POS.ist.other==lst_see_time&&dis1<=10&&!POS.fcmv.lock
-				&&RAND_BOOL(20)){
-					double v=10,v2=1;
+				if(game_timer[s]<=game_time&&POS.ist.other==lst_see_time&&dis1<=10&&dis1>=4&&!POS.fcmv.lock
+				&&RAND_BOOL(30)){
+					double v=15,v2=1;
 					int nohurt_time=(v-v2)*1000;//v0,vt=1,a=1->t=(v0-vt)/a 
-					gt.lfin.no_hurt=game_time+nohurt_time;//防止伤害 
+					gt.rampage=true;//gt.lfin.no_hurt=game_time+nohurt_time;//防止伤害 
 					throw_thing(gt.pos,v,0,calc_angle(gt.pos,player1.pos),MP(GHOST,id)); 
 				}
 			}
@@ -8074,7 +8098,7 @@ void initial(){//游戏初始化
 						}
 					}
 				}
-				if(POS.fcmv.lock&&game_timer[s+"被砸中"]<=game_time){
+				if(POS.fcmv.lock&&game_timer[s+"被砸中"]<=game_time&&!gt.rampage){//飞行中且没有带免伤 
 					if(POS.fcmv.speed()>5){//速度大于5每秒受到1点伤害 
 						ghost_reduce_blood(id,1,POS.fcmv.from);
 						game_timer[s+"被砸中"]=game_time+500;
@@ -8173,6 +8197,8 @@ void initial(){//游戏初始化
 						}
 						break;
 				}
+				force_move &FCMV=POS.fcmv;
+				if(gt.rampage&&(FCMV.lock?not(FCMV.from==MP(int(GHOST),id)):1)) gt.rampage=false;//弹射起步结束 
 				double atktime=gt.attack_time;
 				ghost_attack(id,s);//到了攻击时间
 				if(game_timer[s]>game_time)//时间没到不移动 
@@ -8192,7 +8218,6 @@ void initial(){//游戏初始化
 					lfin.change=0;
 				}
 				if(THING.lsr.exist||POS.fcmv.lock){
-					force_move &FCMV=POS.fcmv;
 					if(FCMV.lock&&(spat.defense==ROCK||spat.defense==SHIELD)){
 						int k=spat.rck.k;
 						FCMV.init3(FCMV.vx.speed*k,FCMV.vy.speed*k);
@@ -10203,8 +10228,11 @@ void initial(){//游戏初始化
 					vibrate_spider_net(npos,speed*1000);//震动蜘蛛网 
 				}
 				else{
-					living_things_reduce_blood(fmb.pos,(player_here(fmb.pos)?max(0.0,speed-5):speed)*0.2,1,FCMV.from);
-					//玩家对速度5m/s以下免伤 
+					if(player_here(fmb.pos))//玩家速度<=5不扣血 
+						living_things_reduce_blood(fmb.pos,max(0.0,speed-5)*0.2,1,FCMV.from);
+					else if(!(ghost_here(fmb.pos)&&POS.emy.id>=0&&POS.emy.id<ghosts.size()&&ghosts[POS.emy.id].rampage))
+					//鬼在横冲直撞时撞玩家不扣血 
+						living_things_reduce_blood(fmb.pos,speed*0.2,1,FCMV.from);
 					int door_d=turn(d,TURN_BACK,4,19);
 					if(mvb_here(npos)&&NMVB.kind!=BOX||!nobody_here2(npos)&&!closed_box_here(npos,door_d)){//有东西/生物且不是箱子或B型蜘蛛附肢 
 						//game_flag["飞"]=true;pos_change.insert(fmb.pos);pos_change.insert(npos);
